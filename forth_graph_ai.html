@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Forth Graph ∞</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #080808; color: #bbb;
+      font-family: 'Courier New', monospace;
+      display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden;
+    }
+
+    /* ── Control bar ─────────────────────────────────────────────── */
+    #bar {
+      flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px;
+      border-bottom: 1px solid #0e0e0e;
+      background: #060606;
+      flex-wrap: nowrap;
+    }
+    #bar h1 { font-size: 10px; letter-spacing: 5px; color: #383838; font-weight: bold; white-space: nowrap; }
+    button {
+      background: transparent; color: #777;
+      border: 1px solid #444; padding: 5px 13px;
+      font-family: inherit; font-size: 9px; font-weight: bold; letter-spacing: 2px;
+      cursor: pointer; text-transform: uppercase;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+      white-space: nowrap;
+    }
+    button:hover:not(:disabled) { color: #ccc; border-color: #888; background: #111; }
+    button:disabled { opacity: 0.2; cursor: default; }
+    #breed-btn { color: #883318; border-color: #552210; }
+    #breed-btn:not(:disabled) { color: #ff6b35; border-color: #cc4a20; }
+    #breed-btn:not(:disabled):hover { color: #ff8f5f !important; border-color: #ff6b35 !important; background: #1a0e08 !important; }
+    #anim-btn { color: #1a7a1a; border-color: #124012; }
+    #anim-btn:not(:disabled) { color: #28c828; border-color: #18881a; }
+    #anim-btn:not(:disabled):hover { color: #55ef55 !important; border-color: #28c828 !important; background: #081408 !important; }
+    #gen-btn { color: #2868a8; border-color: #1a4070; }
+    #gen-btn:hover:not(:disabled) { color: #55aaff !important; border-color: #2878c8 !important; background: #08101a !important; }
+    #reset-btn { color: #666; border-color: #3a3a3a; }
+    #export-btn { color: #444; border-color: #2a2a14; }
+    #export-btn:not(:disabled) { color: #c8b828; border-color: #786a10; }
+    #export-btn:not(:disabled):hover { color: #f0e040 !important; border-color: #c8b828 !important; background: #141208 !important; }
+    #help-btn { color: #888; border-color: #555; border-radius: 50%; width: 26px; height: 26px; padding: 0; flex-shrink: 0; font-size: 11px; font-weight: bold; }
+    #help-btn:hover { color: #eee !important; border-color: #aaa !important; background: #181818 !important; }
+    #status { font-size: 8px; color: #444; letter-spacing: 2px; margin-left: auto; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── AI controls ─────────────────────────────────────────────── */
+    #theme-input {
+      background: transparent; color: #555;
+      border: 1px solid #1c1c1c; padding: 5px 9px;
+      font-family: inherit; font-size: 9px; letter-spacing: 1px;
+      width: 150px; outline: none;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #theme-input:focus { border-color: #4a1a6a; color: #9b35ff; }
+    #theme-input::placeholder { color: #1e1e1e; }
+
+    #ai-btn { color: #8a30c8; border-color: #5a1a8a; }
+    #ai-btn:not(:disabled):hover { color: #c878ff !important; border-color: #9b35ff !important; background: #110818 !important; }
+    #ai-btn.loading { color: #9b35ff !important; border-color: #7a2aaa !important; animation: ai-loading 0.7s ease-in-out infinite; }
+
+    @keyframes ai-loading {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #auto-btn { color: #555; border-color: #333; }
+    #auto-btn.active { color: #9b35ff; border-color: #6a1a9a; }
+    #auto-btn.active:hover { color: #c878ff !important; border-color: #9b35ff !important; }
+
+    #key-btn { color: #555; border-color: #333; padding: 5px 8px; }
+    #key-btn.set { color: #28c828; border-color: #18881a; }
+    #export-btn:not(:disabled) { color: #3a3a1a; border-color: #3a3a1a; }
+    #export-btn:not(:disabled):hover { color: #d4c840 !important; border-color: #d4c840 !important; }
+    #export-btn.recording { color: #c8a020 !important; border-color: #c8a020 !important; animation: ai-loading 0.7s ease-in-out infinite; }
+
+    /* ── Scrollable workspace ────────────────────────────────────── */
+    #workspace {
+      flex: 1; overflow: scroll;
+      position: relative;
+      background:
+        radial-gradient(circle, #0f0f0f 1px, transparent 1px) 0 0 / 24px 24px;
+    }
+    #workspace-inner {
+      position: relative; width: 4000px; height: 3000px;
+    }
+
+    /* ── SVG edge layer ──────────────────────────────────────────── */
+    #edges {
+      position: absolute; top: 0; left: 0;
+      width: 4000px; height: 3000px;
+      pointer-events: none; overflow: visible;
+    }
+
+    /* ── Nodes ───────────────────────────────────────────────────── */
+    .node {
+      position: absolute;
+      width: 148px;
+      background: #0c0c0c;
+      border: 1.5px solid #161616;
+      cursor: grab;
+      user-select: none;
+      transition: border-color 0.1s;
+    }
+    .node:active { cursor: grabbing; }
+    .node:hover { border-color: #262626; }
+    .node.p1 { border-color: #ff6b35; }
+    .node.p2 { border-color: #35bfff; }
+    .node.generated { border-color: #1a2a3a; }
+    .node.generated:hover { border-color: #2a4a6a; }
+    .node.anim { border-color: #1a3a1a; animation: anim-pulse 1.8s ease-in-out infinite; }
+    .node.anim:hover { border-color: #3a6a3a; }
+    .node.ai { border-color: #5a1a8a; }
+    .node.ai:hover { border-color: #9b35ff; }
+    .node.ai.fresh { animation: ai-pulse 2.2s ease-in-out 3; }
+
+    @keyframes anim-pulse {
+      0%, 100% { border-color: #1a3a1a; box-shadow: 0 0 0 0 transparent; }
+      50%       { border-color: #28c828; box-shadow: 0 0 7px 1px #28c82840; }
+    }
+    @keyframes ai-pulse {
+      0%, 100% { border-color: #3a1050; box-shadow: 0 0 0 0 transparent; }
+      50%       { border-color: #9b35ff; box-shadow: 0 0 9px 2px #9b35ff28; }
+    }
+
+    .node-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 6px 3px;
+      font-size: 7.5px; letter-spacing: 1px;
+      border-bottom: 1px solid #141414;
+      color: #323232;
+      line-height: 1;
+    }
+    .node.p1 .node-header { color: #6a3018; border-bottom-color: #2a0e06; }
+    .node.p2 .node-header { color: #183a5a; border-bottom-color: #081828; }
+    .node.generated .node-header { color: #1a3045; }
+    .node.anim .node-header { color: #1a3e1a; border-bottom-color: #0a1e0a; }
+    .node.ai .node-header { color: #3a1060; border-bottom-color: #180828; }
+
+    .node-tag { letter-spacing: 1px; }
+    .node.p1 .node-tag { color: #ff6b35; }
+    .node.p2 .node-tag { color: #35bfff; }
+    .node.anim .node-code { color: #162e16; }
+    .node.anim .node-tag { color: #28c828; }
+    .node.ai .node-tag { color: #9b35ff; }
+    .node.ai .node-code { color: #2e1050; }
+
+    .node canvas { display: block; width: 144px; height: 144px; margin: 2px; }
+
+    .node-code {
+      font-size: 6.5px; color: #2c2c2c; line-height: 1.5;
+      padding: 4px; word-break: break-all; white-space: pre-wrap;
+      max-height: 58px; overflow-y: auto;
+      border-top: 1px solid #141414; background: #060606;
+      scrollbar-width: none;
+    }
+    .node.p1 .node-code { color: #5a2010; }
+    .node.p2 .node-code { color: #102840; }
+    .node.generated .node-code { color: #162a3e; }
+
+    /* ── Custom words panel ──────────────────────────────────────── */
+    #words-panel {
+      position: fixed; bottom: 14px; right: 14px;
+      background: #060606; border: 1px solid #2a0a40;
+      padding: 8px 12px; min-width: 180px; max-width: 280px;
+      font-size: 7px; letter-spacing: 1px; line-height: 1.9;
+      display: none; z-index: 100;
+    }
+    #words-panel.visible { display: block; }
+    #words-panel-title { color: #5a1a9a; margin-bottom: 3px; font-size: 7.5px; }
+    .word-entry { color: #2a1040; }
+    .word-entry .wname { color: #7a2aaa; }
+    .word-entry .wdef { color: #1e0a2e; }
+
+    /* ── Help modal ─────────────────────────────────────────────── */
+    #help-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.82); z-index: 500;
+      align-items: center; justify-content: center;
+    }
+    #help-overlay.open { display: flex; }
+    #help-modal {
+      background: #0a0a0e; border: 1px solid #2a2a3e;
+      width: min(560px, 92vw); max-height: 88vh;
+      overflow-y: auto; padding: 28px 30px;
+      scrollbar-width: thin; scrollbar-color: #2a2a3e #0a0a0e;
+    }
+    #help-modal h2 {
+      font-size: 11px; letter-spacing: 4px; color: #666;
+      font-weight: bold; margin-bottom: 20px;
+    }
+    #help-modal h3 {
+      font-size: 9px; letter-spacing: 3px; color: #444;
+      font-weight: bold; margin: 18px 0 10px; text-transform: uppercase;
+    }
+    #help-modal p { font-size: 10px; color: #555; line-height: 1.7; margin-bottom: 8px; }
+    #help-modal .hl { color: #888; }
+    .help-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    .help-table td { font-size: 9px; padding: 4px 6px; vertical-align: top; }
+    .help-table td:first-child { color: #666; font-weight: bold; white-space: nowrap; padding-right: 14px; }
+    .help-table td:last-child { color: #444; line-height: 1.5; }
+    .help-table tr:hover td { background: #0f0f18; }
+    .help-key-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .help-key-row input {
+      flex: 1; background: #060610; border: 1px solid #2a2a4a;
+      color: #9b35ff; font-family: inherit; font-size: 9px;
+      padding: 5px 8px; outline: none; letter-spacing: 1px;
+    }
+    .help-key-row input:focus { border-color: #6a2aaa; }
+    .help-key-row input::placeholder { color: #2a2a3a; }
+    .help-key-row button { flex-shrink: 0; }
+    #help-close {
+      display: block; margin: 24px auto 0;
+      padding: 7px 28px; color: #555; border-color: #333;
+    }
+    #help-close:hover { color: #ccc !important; border-color: #888 !important; }
+
+    /* ── Toast notifications ─────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+      background: #120606; border: 1px solid #5a1010;
+      color: #c05050; padding: 7px 20px;
+      font-size: 8px; letter-spacing: 2px; white-space: nowrap;
+      opacity: 0; transition: opacity 0.25s;
+      pointer-events: none; z-index: 300;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div id="bar">
+  <h1>FORTH GRAPH ∞</h1>
+  <button id="breed-btn" disabled>BREED</button>
+  <button id="anim-btn" disabled>ANIMATE</button>
+  <button id="gen-btn">GENERATE</button>
+  <button id="reset-btn">RESET</button>
+  <button id="export-btn" disabled>EXPORT</button>
+  <input id="theme-input" type="text" placeholder="theme / vibe..." maxlength="80" spellcheck="false">
+  <button id="ai-btn">AI INJECT</button>
+  <button id="auto-btn">AUTO: OFF</button>
+  <button id="key-btn" title="Set API key">KEY</button>
+  <button id="help-btn" title="Instructions">?</button>
+  <span id="status">click to select · delete key removes selected</span>
+</div>
+
+<!-- ── Help modal ───────────────────────────────────────────────────────── -->
+<div id="help-overlay">
+  <div id="help-modal">
+    <h2>FORTH GRAPH ∞ — HOW TO USE</h2>
+
+    <p>Each node is a small program that draws a generative visualization.
+    You <span class="hl">breed nodes together</span> to mix their programs and
+    evolve new visuals. The more you breed, the further the visuals drift from
+    the originals.</p>
+
+    <h3>Selecting nodes</h3>
+    <p>Click any node to select it as <span class="hl">P1 (orange)</span>.
+    Click a second node to select it as <span class="hl">P2 (blue)</span>.
+    Click a selected node again to deselect it. Drag nodes freely to rearrange.</p>
+
+    <h3>Buttons</h3>
+    <table class="help-table">
+      <tr><td>BREED</td><td>Combine P1 and P2 into a child node. The child's program is a splice of both parents, with a small random tweak. The child becomes P1 automatically.</td></tr>
+      <tr><td>ANIMATE</td><td>Bring the selected node to life as a real-time animation. The animated version starts from the same visual state as the static snapshot.</td></tr>
+      <tr><td>GENERATE</td><td>Add one new random node — either a mutated seed program or a crossover of two seeds. Good for fresh starting material.</td></tr>
+      <tr><td>EXPORT</td><td>Download the selected node. Static nodes save as PNG. Animated nodes record 3 seconds as a WebM video.</td></tr>
+      <tr><td>AI INJECT</td><td>Use Claude AI to write a brand-new Forth program based on the theme you typed. Requires an API key (see below).</td></tr>
+      <tr><td>AUTO</td><td>Toggle automatic AI injection on a timer (30s / 60s / 120s / off). Keeps adding new nodes without you clicking.</td></tr>
+      <tr><td>KEY</td><td>Set your Anthropic API key. Required for AI INJECT and AUTO. Saved in your browser's local storage.</td></tr>
+      <tr><td>RESET</td><td>Clear everything and start fresh with 6 new random seed nodes.</td></tr>
+      <tr><td>Delete key</td><td>Remove the currently selected node (and cancel its animation if live).</td></tr>
+    </table>
+
+    <h3>Theme / vibe input</h3>
+    <p>Type a word or phrase (e.g. <span class="hl">ocean</span>,
+    <span class="hl">fragmentation</span>, <span class="hl">warm chaos</span>)
+    before clicking AI INJECT. Claude will write a Forth program that evokes
+    that feeling. Press Enter as a shortcut.</p>
+
+    <h3>About breeding</h3>
+    <p>Breeding is inherently random — the splice point is chosen at random, and
+    a mutation is applied on top. Sometimes the child looks exactly like one
+    parent. Sometimes it looks blank or broken.
+    <span class="hl">That's a happy accident.</span> Don't delete it — breed it
+    with something else, or move on to other nodes and come back. Unexpected
+    results are part of the process.</p>
+
+    <h3>Anthropic API key</h3>
+    <p>Required only for AI INJECT and AUTO. Get one at
+    <span class="hl">console.anthropic.com</span>. It is stored locally in your
+    browser and never sent anywhere except Anthropic's API.</p>
+    <div class="help-key-row">
+      <input id="modal-key-input" type="password" placeholder="sk-ant-..." spellcheck="false">
+      <button id="modal-key-save">SAVE KEY</button>
+    </div>
+
+    <button id="help-close">CLOSE</button>
+  </div>
+</div>
+
+<div id="workspace">
+  <div id="workspace-inner">
+    <svg id="edges"></svg>
+    <div id="node-layer"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="words-panel">
+  <div id="words-panel-title">CUSTOM WORDS</div>
+  <div id="words-list"></div>
+</div>
+
+<script>
+// ─── Tokenizer ────────────────────────────────────────────────────────────────
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  while (i < src.length) {
+    while (i < src.length && /\s/.test(src[i])) i++;
+    if (i >= src.length) break;
+    if (src[i] === '{') {
+      let depth = 1, j = i + 1;
+      while (j < src.length && depth > 0) {
+        if (src[j] === '{') depth++;
+        else if (src[j] === '}') depth--;
+        j++;
+      }
+      tokens.push({ t: 'block', v: tokenize(src.slice(i + 1, j - 1)) });
+      i = j;
+    } else if (src[i] === '}') {
+      i++;
+    } else {
+      let j = i;
+      while (j < src.length && !/[\s{}]/.test(src[j])) j++;
+      const word = src.slice(i, j);
+      if (word) {
+        const n = +word;
+        tokens.push(isNaN(n) ? { t: 'w', v: word } : { t: 'n', v: n });
+      }
+      i = j;
+    }
+  }
+  return tokens;
+}
+
+// ─── Custom word dictionary ───────────────────────────────────────────────────
+// AI-defined words: name → token array. Checked in the interpreter's default case.
+const USER_WORDS = {};
+
+// ─── Interpreter ──────────────────────────────────────────────────────────────
+function run(toks, ctx, W, H, fr, lv) {
+  if (!lv) lv = [];
+  const st = [];
+  const pu = v => st.push(v);
+  const po = () => st.length ? st.pop() : 0;
+
+  for (let ip = 0; ip < toks.length; ip++) {
+    const tk = toks[ip];
+    if (tk.t === 'n') { pu(tk.v); continue; }
+    if (tk.t === 'block') { pu(tk); continue; }
+    const w = tk.v;
+    switch (w) {
+      case 'pi':     pu(Math.PI); break;
+      case 'twopi':  pu(Math.PI * 2); break;
+      case 'frame':  pu(fr); break;
+      case 'width':  pu(W); break;
+      case 'height': pu(H); break;
+      case 'cx':     pu(W / 2); break;
+      case 'cy':     pu(H / 2); break;
+      case 'rand':   pu(Math.random()); break;
+      case 'i':      pu(lv.length ? lv[lv.length - 1] : 0); break;
+      case 'j':      pu(lv.length >= 2 ? lv[lv.length - 2] : 0); break;
+      case 'dup':  { const a = po(); pu(a); pu(a); break; }
+      case 'drop': po(); break;
+      case 'swap': { const b = po(), a = po(); pu(b); pu(a); break; }
+      case 'over': { const b = po(), a = po(); pu(a); pu(b); pu(a); break; }
+      case 'rot':  { const c = po(), b = po(), a = po(); pu(b); pu(c); pu(a); break; }
+      case '2dup': { const b = po(), a = po(); pu(a); pu(b); pu(a); pu(b); break; }
+      case '+':    pu(po() + po()); break;
+      case '-':    { const b = po(), a = po(); pu(a - b); break; }
+      case '*':    pu(po() * po()); break;
+      case '/':    { const b = po(), a = po(); pu(b ? a / b : 0); break; }
+      case 'mod':  { const b = po(), a = po(); pu(b ? ((a % b) + b) % b : 0); break; }
+      case 'abs':   pu(Math.abs(po())); break;
+      case 'neg':   pu(-po()); break;
+      case 'floor': pu(Math.floor(po())); break;
+      case 'ceil':  pu(Math.ceil(po())); break;
+      case 'round': pu(Math.round(po())); break;
+      case 'sqrt':  pu(Math.sqrt(Math.abs(po()))); break;
+      case 'sin':   pu(Math.sin(po())); break;
+      case 'cos':   pu(Math.cos(po())); break;
+      case 'tan':   pu(Math.tan(po())); break;
+      case 'pow':   { const b = po(), a = po(); pu(Math.pow(Math.abs(a), b)); break; }
+      case 'min':   pu(Math.min(po(), po())); break;
+      case 'max':   pu(Math.max(po(), po())); break;
+      case 'clamp': { const hi = po(), lo = po(), v = po(); pu(Math.max(lo, Math.min(hi, v))); break; }
+      case 'rgb': {
+        const b = po(), g = po(), r = po();
+        ctx.fillStyle = ctx.strokeStyle = `rgb(${r|0},${g|0},${b|0})`; break;
+      }
+      case 'rgba': {
+        const a = po(), b = po(), g = po(), r = po();
+        ctx.fillStyle = ctx.strokeStyle = `rgba(${r|0},${g|0},${b|0},${a})`; break;
+      }
+      case 'hsl': {
+        const l = po(), s = po(), h = po();
+        ctx.fillStyle = ctx.strokeStyle = `hsl(${h|0},${s|0}%,${l|0}%)`; break;
+      }
+      case 'hsla': {
+        const a = po(), l = po(), s = po(), h = po();
+        ctx.fillStyle = ctx.strokeStyle = `hsla(${h|0},${s|0}%,${l|0}%,${a})`; break;
+      }
+      case 'alpha': ctx.globalAlpha = Math.max(0, Math.min(1, po())); break;
+      case 'bg': case 'background': {
+        const b = po(), g = po(), r = po(), pa = ctx.globalAlpha;
+        ctx.globalAlpha = 1; ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+        ctx.fillRect(0, 0, W, H); ctx.globalAlpha = pa; break;
+      }
+      case 'bg-a': case 'background-a': {
+        const a = po(), b = po(), g = po(), r = po(), pa = ctx.globalAlpha;
+        ctx.globalAlpha = Math.max(0, Math.min(1, a));
+        ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+        ctx.fillRect(0, 0, W, H); ctx.globalAlpha = pa; break;
+      }
+      case 'clear': ctx.clearRect(0, 0, W, H); break;
+      case 'lw': case 'linewidth': ctx.lineWidth = Math.max(0.1, po()); break;
+      case 'circle': {
+        const r = po(), y = po(), x = po();
+        if (r > 0) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); } break;
+      }
+      case 'ocircle': case 'stroke-circle': {
+        const r = po(), y = po(), x = po();
+        if (r > 0) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); } break;
+      }
+      case 'rect': {
+        const h = po(), ww = po(), y = po(), x = po(); ctx.fillRect(x, y, ww, h); break;
+      }
+      case 'orect': case 'stroke-rect': {
+        const h = po(), ww = po(), y = po(), x = po(); ctx.strokeRect(x, y, ww, h); break;
+      }
+      case 'line': {
+        const y2 = po(), x2 = po(), y1 = po(), x1 = po();
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); break;
+      }
+      case 'triangle': {
+        const y3 = po(), x3 = po(), y2 = po(), x2 = po(), y1 = po(), x1 = po();
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.lineTo(x3,y3);
+        ctx.closePath(); ctx.fill(); break;
+      }
+      case 'translate': { const y = po(), x = po(); ctx.translate(x, y); break; }
+      case 'scale':     { const y = po(), x = po(); ctx.scale(x, y); break; }
+      case 'rotate':    ctx.rotate(po()); break;
+      case 'push': case 'save':    ctx.save(); break;
+      case 'pop':  case 'restore': ctx.restore(); break;
+      case 'times': {
+        const n = po(), next = toks[ip + 1];
+        if (next && next.t === 'block') {
+          ip++;
+          const cnt = Math.max(0, Math.min(500, n | 0));
+          for (let ii = 0; ii < cnt; ii++) run(next.v, ctx, W, H, fr, [...lv, ii]);
+        }
+        break;
+      }
+      case 'call': {
+        const blk = po();
+        if (blk && blk.t === 'block') run(blk.v, ctx, W, H, fr, lv);
+        break;
+      }
+      default: {
+        // AI-defined custom words expand inline
+        if (USER_WORDS[w]) run(USER_WORDS[w], ctx, W, H, fr, lv);
+        break;
+      }
+    }
+  }
+}
+
+// ─── Serialization ────────────────────────────────────────────────────────────
+function toksToStr(toks) {
+  return toks.map(t => {
+    if (t.t === 'n') return String(Math.round(t.v * 1000) / 1000);
+    if (t.t === 'w') return t.v;
+    return '{ ' + toksToStr(t.v) + ' }';
+  }).join(' ');
+}
+
+// ─── Crossover ────────────────────────────────────────────────────────────────
+function compress(toks) {
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    if (toks[i].t === 'n' &&
+        i + 1 < toks.length && toks[i+1].t === 'w' && toks[i+1].v === 'times' &&
+        i + 2 < toks.length && toks[i+2].t === 'block') {
+      out.push({ t: 'loop', n: toks[i].v, body: toks[i+2].v });
+      i += 2;
+    } else {
+      out.push(toks[i]);
+    }
+  }
+  return out;
+}
+
+function decompress(atoms) {
+  return atoms.flatMap(a =>
+    a.t === 'loop'
+      ? [{ t: 'n', v: a.n }, { t: 'w', v: 'times' }, { t: 'block', v: a.body }]
+      : [a]
+  );
+}
+
+function crossover(a, b) {
+  const aa = compress(a), bb = compress(b);
+  if (!aa.length) return JSON.parse(JSON.stringify(b));
+  if (!bb.length) return JSON.parse(JSON.stringify(a));
+  const ca = 1 + Math.floor(Math.random() * aa.length);
+  const cb = Math.floor(Math.random() * bb.length);
+  return decompress([...aa.slice(0, ca), ...bb.slice(cb)]);
+}
+
+// ─── Mutation ─────────────────────────────────────────────────────────────────
+function mutate(toks) {
+  const t = JSON.parse(JSON.stringify(toks));
+  const refs = [];
+  function collect(arr) {
+    arr.forEach((tk, i) => {
+      if (tk.t === 'n') refs.push({ arr, i });
+      if (tk.t === 'block') collect(tk.v);
+    });
+  }
+  collect(t);
+  if (!refs.length) return t;
+
+  const r = Math.random();
+  if (r < 0.30) {
+    const count = Math.random() < 0.35 ? 2 : 1;
+    for (let c = 0; c < count; c++) {
+      const { arr, i } = refs[Math.floor(Math.random() * refs.length)];
+      arr[i] = { t: 'n', v: arr[i].v * (0.7 + Math.random() * 0.6) + (Math.random() - 0.5) * 15 };
+    }
+  } else if (r < 0.50) {
+    const { arr, i } = refs[Math.floor(Math.random() * refs.length)];
+    arr[i] = { t: 'n', v: -arr[i].v };
+  } else if (r < 0.65) {
+    if (refs.length >= 2) {
+      const i1 = Math.floor(Math.random() * refs.length);
+      let i2 = Math.floor(Math.random() * refs.length);
+      while (i2 === i1) i2 = Math.floor(Math.random() * refs.length);
+      const tmp = refs[i1].arr[refs[i1].i].v;
+      refs[i1].arr[refs[i1].i].v = refs[i2].arr[refs[i2].i].v;
+      refs[i2].arr[refs[i2].i].v = tmp;
+    }
+  } else if (r < 0.80) {
+    const { arr, i } = refs[Math.floor(Math.random() * refs.length)];
+    arr[i] = { t: 'n', v: (Math.random() - 0.5) * 360 };
+  } else {
+    const { arr, i } = refs[Math.floor(Math.random() * refs.length)];
+    arr[i] = { t: 'n', v: arr[i].v + (Math.random() - 0.5) * 120 };
+  }
+  return t;
+}
+
+// ─── Seeds ────────────────────────────────────────────────────────────────────
+const SEEDS = [
+  `0 0 0 0.2 bg-a
+25 80 55 hsl
+12 times {
+  i twopi * 12 / frame 0.03 * +
+  dup sin 100 * cx + swap cos 100 * cy +
+  frame 0.06 * sin 9 * 13 + circle
+}`,
+
+  `0 0 0 0.05 bg-a
+1.5 lw
+185 85 55 hsl
+20 times {
+  0
+  i height * 20 /
+  width
+  i height * 20 / frame 0.04 * i 0.5 * + sin 45 * +
+  line
+}`,
+
+  `0 0 0 0.22 bg-a
+1.5 lw
+0 0 80 hsl
+7 times {
+  cx cy
+  frame 4 * i 38 * + 210 mod
+  ocircle
+}`,
+
+  `0 0 0 0.04 bg-a
+40 times {
+  i 137 * frame + 512 mod width * 512 /
+  i 97 * frame 2 * + 512 mod height * 512 /
+  i 2 mod 155 * 20 + 85 60 hsl
+  frame 0.09 * i + sin 3 * 5 + circle
+}`,
+
+  `0 0 0 0.1 bg-a
+50 times {
+  i twopi * 50 / 3 * frame 0.015 * +
+  dup sin i 3 * * cx +
+  swap cos i 3 * * cy +
+  i 7 * frame + 360 mod 80 55 hsl
+  3 circle
+}`,
+
+  `0 0 0 0.15 bg-a
+1.5 lw
+0 0 30 hsl
+5 times {
+  cx cy frame 5 * i 48 * + 225 mod ocircle
+}
+210 85 58 hsl
+16 times {
+  i twopi * 16 / frame 0.02 * +
+  dup sin 75 * cx + swap cos 75 * cy +
+  frame 0.04 * sin 5 * 7 + circle
+}`,
+
+  `0 0 0 0.25 bg-a
+8 times {
+  i width * 8 /
+  frame 0.02 * i 0.8 * + sin height * 3 / height 4 / +
+  width 8 /
+  height 2 /
+  i 2 mod 155 * 270 + frame 0.4 * + 360 mod 70 45 hsl
+  rect
+}`,
+
+  `0 0 0 0.08 bg-a
+100 times {
+  i 10 mod width * 10 / width 20 / +
+  i 10 / floor height * 10 / height 20 / +
+  i 10 mod i 10 / floor + 25 * frame 0.5 * + 360 mod 80 55 hsl
+  frame 0.04 * i + sin 3 * 5 + circle
+}`,
+
+  `0 0 0 0.35 bg-a
+0 0 95 hsl
+3 lw
+15 times {
+  0
+  frame 0.05 * i 0.7 * + sin height * height 2 / +
+  width
+  frame 0.05 * i 0.7 * + cos height * height 2 / +
+  line
+}`,
+];
+
+// ─── App globals ──────────────────────────────────────────────────────────────
+const CANVAS_RES    = 240;
+const CANVAS_CSS    = 144;
+const NODE_W        = 148;
+const NODE_HEADER   = 22;
+const NODE_APPROX_H = NODE_HEADER + CANVAS_CSS + 62;
+const RENDER_FRAMES = 100;
+
+const nodes = new Map();
+let nodeIdCounter = 0;
+let sel = [null, null];
+let lastSelected = null;  // most recently clicked node — used by animate & delete
+let dragState = null;
+
+// ─── Edge rendering ───────────────────────────────────────────────────────────
+function nodeEdgePoint(node) {
+  return { x: node.x + NODE_W / 2, y: node.y + NODE_HEADER + CANVAS_CSS / 2 };
+}
+
+function redrawEdges() {
+  const svg = document.getElementById('edges');
+  svg.innerHTML = '';
+  for (const [, node] of nodes) {
+    const nc = nodeEdgePoint(node);
+    for (let pi = 0; pi < node.parentIds.length; pi++) {
+      const parent = nodes.get(node.parentIds[pi]);
+      if (!parent) continue;
+      const pc = nodeEdgePoint(parent);
+      const midY = (pc.y + nc.y) / 2;
+      const d = `M ${pc.x} ${pc.y} C ${pc.x} ${midY} ${nc.x} ${midY} ${nc.x} ${nc.y}`;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      if (node.isAnim) {
+        path.setAttribute('stroke', '#1a6a1a');
+        path.setAttribute('stroke-dasharray', '4 4');
+      } else if (node.isAI) {
+        path.setAttribute('stroke', '#5a1880');
+        path.setAttribute('stroke-dasharray', '3 5');
+      } else {
+        path.setAttribute('stroke', pi === 0 ? '#6a2c12' : '#12306a');
+      }
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('fill', 'none');
+      svg.appendChild(path);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', nc.x); dot.setAttribute('cy', nc.y); dot.setAttribute('r', '3');
+      dot.setAttribute('fill', node.isAnim ? '#1a6a1a' : node.isAI ? '#5a1880' : (pi === 0 ? '#6a2c12' : '#12306a'));
+      svg.appendChild(dot);
+    }
+  }
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+function renderNode(node) {
+  const ctx = node.ctx;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CANVAS_RES, CANVAS_RES);
+  const f0 = node.frameOffset;
+  for (let f = f0; f < f0 + RENDER_FRAMES; f++) {
+    try { ctx.save(); run(node.toks, ctx, CANVAS_RES, CANVAS_RES, f); ctx.restore(); } catch (_) {}
+  }
+}
+
+// ─── Node creation ────────────────────────────────────────────────────────────
+function addNode(toks, parentIds, x, y, isGenerated, isAI, aiLabel) {
+  const id = nodeIdCounter++;
+  const src = toksToStr(toks);
+  const lineage = parentIds.length ? `[${parentIds.join('+')}]` : (isAI ? '✦ ai' : isGenerated ? '✦' : 'seed');
+
+  const div = document.createElement('div');
+  let cls = 'node';
+  if (isAI) cls += ' ai';
+  else if (isGenerated) cls += ' generated';
+  div.className = cls;
+  div.style.left = x + 'px';
+  div.style.top = y + 'px';
+
+  const header = document.createElement('div');
+  header.className = 'node-header';
+  const tagLabel = isAI ? (aiLabel || 'ai') : '';
+  header.innerHTML = `<span>#${id} <span style="opacity:0.5">${lineage}</span></span><span class="node-tag">${tagLabel}</span>`;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_RES; canvas.height = CANVAS_RES;
+
+  const codeEl = document.createElement('div');
+  codeEl.className = 'node-code';
+  codeEl.textContent = src.trim();
+
+  div.append(header, canvas, codeEl);
+  div.addEventListener('mousedown', e => { e.preventDefault(); onNodeMousedown(e, id); });
+  document.getElementById('node-layer').appendChild(div);
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, CANVAS_RES, CANVAS_RES);
+
+  const node = {
+    id, x, y, toks, src,
+    parentIds: parentIds || [],
+    frameOffset: Math.floor(Math.random() * 500),
+    isGenerated, isAI: !!isAI,
+    div, canvas, ctx,
+  };
+  nodes.set(id, node);
+  renderNode(node);
+  if (isBlankCanvas(node.canvas)) {
+    showToast('rendered blank — deleting node, try different parents');
+    node.div.remove();
+    nodes.delete(id);
+    redrawEdges();
+    return null;
+  }
+  redrawEdges();
+  return node;
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+function getWsPos(e) {
+  const ws = document.getElementById('workspace');
+  const r = ws.getBoundingClientRect();
+  return { x: e.clientX - r.left + ws.scrollLeft, y: e.clientY - r.top + ws.scrollTop };
+}
+
+function onNodeMousedown(e, id) {
+  const node = nodes.get(id);
+  const pos = getWsPos(e);
+  dragState = { id, startX: pos.x, startY: pos.y, origX: node.x, origY: node.y, moved: false };
+}
+
+document.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  const pos = getWsPos(e);
+  const dx = pos.x - dragState.startX, dy = pos.y - dragState.startY;
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragState.moved = true;
+  const node = nodes.get(dragState.id);
+  node.x = dragState.origX + dx;
+  node.y = dragState.origY + dy;
+  node.div.style.left = node.x + 'px';
+  node.div.style.top = node.y + 'px';
+  redrawEdges();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!dragState) return;
+  if (!dragState.moved) selectNode(dragState.id);
+  dragState = null;
+});
+
+function selectNode(id) {
+  lastSelected = id;
+  for (const [, n] of nodes) {
+    n.div.classList.remove('p1', 'p2');
+    const tag = n.div.querySelector('.node-tag');
+    if (tag && !n.isAI) tag.textContent = '';
+  }
+  if (sel[0] === id)        sel[0] = null;
+  else if (sel[1] === id)   sel[1] = null;
+  else if (sel[0] === null) sel[0] = id;
+  else if (sel[1] === null) sel[1] = id;
+  else { sel[0] = sel[1]; sel[1] = id; }
+
+  if (sel[0] !== null && nodes.has(sel[0])) {
+    nodes.get(sel[0]).div.classList.add('p1');
+    nodes.get(sel[0]).div.querySelector('.node-tag').textContent = 'P1';
+  }
+  if (sel[1] !== null && nodes.has(sel[1])) {
+    nodes.get(sel[1]).div.classList.add('p2');
+    nodes.get(sel[1]).div.querySelector('.node-tag').textContent = 'P2';
+  }
+  updateUI();
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function updateUI() {
+  const ready = sel[0] !== null && sel[1] !== null;
+  document.getElementById('breed-btn').disabled = !ready;
+  const hasSelected = lastSelected !== null && nodes.has(lastSelected);
+  document.getElementById('anim-btn').disabled = !hasSelected;
+  document.getElementById('export-btn').disabled = !hasSelected;
+  if (autoIdx === 0) {
+    if (!ready && sel[0] === null)
+      setStatus('click a node to select p1, then p2');
+    else if (!ready)
+      setStatus(`p1: #${sel[0]}  —  click another node for p2`);
+    else
+      setStatus(`#${sel[0]} × #${sel[1]}  →  breed`);
+  }
+}
+
+// ─── Breed ────────────────────────────────────────────────────────────────────
+function breed() {
+  if (sel[0] === null || sel[1] === null) return;
+  const p1 = nodes.get(sel[0]), p2 = nodes.get(sel[1]);
+  if (!p1 || !p2) return;
+  const childToks = mutate(crossover(p1.toks, p2.toks));
+  const cx = (p1.x + p2.x) / 2 + (Math.random() - 0.5) * 80;
+  const cy = Math.max(p1.y, p2.y) + NODE_APPROX_H + 60;
+  const child = addNode(childToks, [sel[0], sel[1]], cx, cy, false);
+  for (const [, n] of nodes) {
+    n.div.classList.remove('p1', 'p2');
+    const tag = n.div.querySelector('.node-tag');
+    if (tag && !n.isAI) tag.textContent = '';
+  }
+  sel[0] = child.id; sel[1] = null;
+  child.div.classList.add('p1');
+  child.div.querySelector('.node-tag').textContent = 'P1';
+}
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+function deleteNode(id) {
+  const node = nodes.get(id);
+  if (!node) return;
+  if (node.animFrameId) cancelAnimationFrame(node.animFrameId);
+  for (const [, n] of nodes) n.parentIds = n.parentIds.filter(pid => pid !== id);
+  node.div.remove();
+  nodes.delete(id);
+  if (sel[0] === id) sel[0] = null;
+  if (sel[1] === id) sel[1] = null;
+  if (lastSelected === id) lastSelected = null;
+  for (const [, n] of nodes) {
+    n.div.classList.remove('p1', 'p2');
+    const tag = n.div.querySelector('.node-tag');
+    if (tag && !n.isAI) tag.textContent = '';
+  }
+  if (sel[0] !== null && nodes.has(sel[0])) {
+    nodes.get(sel[0]).div.classList.add('p1');
+    nodes.get(sel[0]).div.querySelector('.node-tag').textContent = 'P1';
+  }
+  if (sel[1] !== null && nodes.has(sel[1])) {
+    nodes.get(sel[1]).div.classList.add('p2');
+    nodes.get(sel[1]).div.querySelector('.node-tag').textContent = 'P2';
+  }
+  redrawEdges();
+  updateUI();
+}
+
+// ─── Animate ──────────────────────────────────────────────────────────────────
+function createAnimNode(parentId) {
+  const parent = nodes.get(parentId);
+  if (!parent) return;
+  const toks = JSON.parse(JSON.stringify(parent.toks));
+  const id = nodeIdCounter++;
+  const x = parent.x + NODE_W + 30;
+  const y = parent.y;
+
+  const div = document.createElement('div');
+  div.className = 'node anim';
+  div.style.left = x + 'px'; div.style.top = y + 'px';
+
+  const header = document.createElement('div');
+  header.className = 'node-header';
+  header.innerHTML = `<span>#${id} <span style="opacity:0.5">▶ live</span></span><span class="node-tag"></span>`;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_RES; canvas.height = CANVAS_RES;
+
+  const codeEl = document.createElement('div');
+  codeEl.className = 'node-code';
+  codeEl.textContent = toksToStr(toks).trim();
+
+  div.append(header, canvas, codeEl);
+  div.addEventListener('mousedown', e => { e.preventDefault(); onNodeMousedown(e, id); });
+  document.getElementById('node-layer').appendChild(div);
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, CANVAS_RES, CANVAS_RES);
+
+  // Pre-roll so anim node starts visually matching its parent's static snapshot
+  const f0 = parent.frameOffset;
+  for (let f = f0; f < f0 + RENDER_FRAMES; f++) {
+    try { ctx.save(); run(toks, ctx, CANVAS_RES, CANVAS_RES, f); ctx.restore(); } catch (_) {}
+  }
+
+  // Blank after pre-roll → nothing to animate, clean up and bail
+  if (isBlankCanvas(canvas)) {
+    showToast('animation blank — deleting node, try a different source');
+    div.remove();
+    return null;
+  }
+
+  const node = {
+    id, x, y, toks, src: toksToStr(toks),
+    parentIds: [parentId],
+    frameOffset: f0, isGenerated: false, isAnim: true,
+    div, canvas, ctx,
+    animFrameId: null, animFrame: f0 + RENDER_FRAMES,
+  };
+  nodes.set(id, node);
+
+  // Snapshot right after pre-roll to detect frame-independent (static) programs
+  const snapshot = ctx.getImageData(0, 0, CANVAS_RES, CANVAS_RES);
+  let checkedStatic = false;
+  let fallbackFrame = 0;
+
+  // Fallback: gently breathe & sway the static image so the node still feels alive
+  function startFallback() {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = CANVAS_RES; offscreen.height = CANVAS_RES;
+    offscreen.getContext('2d').putImageData(ctx.getImageData(0, 0, CANVAS_RES, CANVAS_RES), 0, 0);
+
+    function fbTick() {
+      node.animFrameId = requestAnimationFrame(fbTick);
+      fallbackFrame++;
+      const t = fallbackFrame * 0.022;
+      ctx.clearRect(0, 0, CANVAS_RES, CANVAS_RES);
+      ctx.save();
+      ctx.translate(CANVAS_RES / 2, CANVAS_RES / 2);
+      ctx.rotate(Math.sin(t * 0.35) * 0.025);
+      const sc = 1 + Math.sin(t * 0.9) * 0.016;
+      ctx.scale(sc, sc);
+      ctx.drawImage(offscreen, -CANVAS_RES / 2, -CANVAS_RES / 2);
+      ctx.restore();
+    }
+    fbTick();
+  }
+
+  function tick() {
+    node.animFrameId = requestAnimationFrame(tick);
+    node.animFrame++;
+    try { ctx.save(); run(toks, ctx, CANVAS_RES, CANVAS_RES, node.animFrame); ctx.restore(); } catch (_) {}
+
+    // After 40 frames check if the program is actually changing the canvas
+    if (!checkedStatic && node.animFrame >= f0 + RENDER_FRAMES + 40) {
+      checkedStatic = true;
+      const current = ctx.getImageData(0, 0, CANVAS_RES, CANVAS_RES);
+      if (canvasesMatch(snapshot.data, current.data)) {
+        cancelAnimationFrame(node.animFrameId);
+        startFallback();
+      }
+    }
+  }
+  node.animFrameId = requestAnimationFrame(tick);
+
+  redrawEdges();
+  return node;
+}
+
+// ─── Generate ─────────────────────────────────────────────────────────────────
+function generate() {
+  const all = Array.from(nodes.values());
+  const rightEdge = all.length ? Math.max(...all.map(n => n.x + NODE_W)) + 50 : 80;
+  const midY = all.length ? all.reduce((s, n) => s + n.y, 0) / all.length : 250;
+  let toks;
+  if (Math.random() < 0.5) {
+    let base = tokenize(SEEDS[Math.floor(Math.random() * SEEDS.length)]);
+    const mCount = 2 + Math.floor(Math.random() * 3);
+    for (let m = 0; m < mCount; m++) base = mutate(base);
+    toks = base;
+  } else {
+    const a = tokenize(SEEDS[Math.floor(Math.random() * SEEDS.length)]);
+    const b = tokenize(SEEDS[Math.floor(Math.random() * SEEDS.length)]);
+    toks = mutate(crossover(a, b));
+  }
+  addNode(toks, [], rightEdge, midY + (Math.random() - 0.5) * 40, true);
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+function reset() {
+  for (const [, n] of nodes) if (n.animFrameId) cancelAnimationFrame(n.animFrameId);
+  nodes.clear();
+  nodeIdCounter = 0;
+  sel = [null, null];
+  document.getElementById('node-layer').innerHTML = '';
+  document.getElementById('edges').innerHTML = '';
+  init();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+const INIT_POS = [
+  [80,  80], [278, 80], [476, 80],
+  [80, 360], [278, 360], [476, 360],
+];
+
+function init() {
+  const indices = Array.from({ length: SEEDS.length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  for (let i = 0; i < 6; i++) {
+    const [x, y] = INIT_POS[i];
+    addNode(tokenize(SEEDS[indices[i]]), [], x, y, false);
+  }
+  updateUI();
+}
+
+// ─── Toast & blank detection ─────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// Returns true if fewer than 0.4% of sampled pixels have any visible brightness.
+// Fraction-based so a single bright dot doesn't count as "not blank".
+function isBlankCanvas(canvas) {
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let lit = 0, total = 0;
+  for (let i = 0; i < data.length; i += 4 * 6) {
+    if (data[i] > 12 || data[i + 1] > 12 || data[i + 2] > 12) lit++;
+    total++;
+  }
+  return lit / total < 0.004;
+}
+
+// Returns true if two pixel arrays look essentially identical (canvas not changing).
+function canvasesMatch(a, b) {
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 4 * 20) {
+    diff += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+  }
+  return diff / (a.length / (4 * 20)) < 1.5;
+}
+
+// ─── API key ──────────────────────────────────────────────────────────────────
+function getApiKey() { return localStorage.getItem('forth_ai_key') || ''; }
+function setApiKey(k) {
+  localStorage.setItem('forth_ai_key', k);
+  document.getElementById('key-btn').classList.toggle('set', !!k);
+}
+
+function promptForKey() {
+  const current = getApiKey();
+  const k = prompt('Anthropic API key (sk-ant-...):', current);
+  if (k !== null) setApiKey(k.trim());
+}
+
+// ─── Claude call ──────────────────────────────────────────────────────────────
+
+// Extracts the first syntactically balanced {...} block from a string.
+// Handles cases where Claude wraps JSON in markdown fences or appends explanation text.
+function extractFirstJson(text) {
+  const start = text.indexOf('{');
+  if (start === -1) throw new Error('no { found');
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  throw new Error('unbalanced braces');
+}
+
+async function callClaude(theme) {
+  let key = getApiKey();
+  if (!key) { promptForKey(); key = getApiKey(); }
+  if (!key) return null;
+
+  const existingWords = Object.keys(USER_WORDS);
+  const wordHint = existingWords.length
+    ? `\nCustom words already defined (you may reuse them): ${existingWords.join(', ')}`
+    : '';
+
+  const system = `You write Forth programs for a 240×240 generative art canvas. This is a STACK-BASED language — arguments come BEFORE words, never inside parentheses.
+
+WORD REFERENCE:
+  Trail fade : 0 0 0 0.1 bg-a         (r g b alpha — call once per frame for motion blur)
+  Color      : 330 80 60 hsl           (h s l — hue 0-360, sat 0-100, lit 0-100)
+  Color+alpha: 330 80 60 0.7 hsla      (h s l alpha)
+  Line width : 2 lw
+  Filled circle  : x y r  circle       (e.g.  cx cy 40 circle)
+  Outline circle : x y r  ocircle
+  Filled rect    : x y w h  rect
+  Line       : x1 y1 x2 y2  line
+  Loop       : N times { body }        (i = index 0..N-1)
+  Save/restore: push  pop              (REQUIRED before/after every rotate or translate)
+  Math       : + - * / mod sin cos tan sqrt abs neg pow min max
+  Stack      : dup swap over drop rot 2dup
+  Values     : frame cx cy width height pi twopi rand i j
+
+MANDATORY RULES — breaking these produces a black screen:
+  1. NEVER write hsl(...) or rgb(...). That is function-call syntax and is IGNORED.
+     WRONG: hsl(330, 80, 60)   RIGHT: 330 80 60 hsl
+  2. ALWAYS wrap rotate/translate in push...pop to prevent coordinate drift.
+     WRONG: frame 0.02 * rotate  ...
+     RIGHT: push  cx cy translate  frame 0.02 * rotate  ...  pop
+  3. Programs MUST use "frame" at least once so they animate over time.
+  4. Keep under 80 tokens. Loop iterations max 150.
+
+new_words: define reusable fragments. Each definition must be a complete valid Forth fragment.
+  Example: {"orbit": "dup sin 70 * cx + swap cos 70 * cy +"}
+  Then call "orbit" in the program instead of repeating that code.${wordHint}
+
+RESPOND with ONLY one JSON object. No markdown fences, no explanation text before or after.
+{"label":"short name","program":"forth string","new_words":{"name":"definition"}}`;
+
+  const user = theme
+    ? `Write a Forth program that LITERALLY matches this theme: "${theme}"
+
+COLOR: translate the theme into a specific hsl hue.
+  pink/rose → hue 320-350   e.g. 335 90 65 hsl
+  blue      → hue 200-240   red → hue 0-10   green → hue 110-140
+  gold      → hue 45-55     purple → hue 270-290   orange → hue 20-35
+  "hot pink" or "neon" → push saturation to 95-100, lightness 60-70
+
+SHAPE: translate the theme into a recognizable visual structure.
+  flower/bloom → multiple petal loops using push cx cy translate rotate { sin/cos orbit circle } pop
+  wave        → sin/cos undulating lines or circles along an axis
+  star        → points radiating from center using rotate pattern
+  grid        → nested i/j loops placing shapes at x y positions
+  spiral      → angle grows with i, radius grows with i
+
+Combine both — a "pink flower" should be literally pink petals in a rotating bloom.
+Postfix only. Must use frame. Always push/pop around rotate.`
+    : `Write a surprising Forth program — something visually striking and unexpected.
+Ideas: polar rose (many petals via push/rotate loop), Lissajous figure, interference moiré grid,
+kaleidoscope (6-fold push/rotate/pop symmetry), morphing equalizer bars, layered orbital rings.
+Pick vivid colors. Must use frame for motion. Always push/pop around rotate.`;
+
+  let resp;
+  try {
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    });
+  } catch (e) {
+    setStatus('network error — check console');
+    console.error(e);
+    return null;
+  }
+
+  if (!resp.ok) {
+    if (resp.status === 401) {
+      localStorage.removeItem('forth_ai_key');
+      document.getElementById('key-btn').classList.remove('set');
+      setStatus('invalid api key — click KEY');
+    } else {
+      setStatus(`api error ${resp.status}`);
+    }
+    return null;
+  }
+
+  const data = await resp.json();
+  const raw = data.content[0].text.trim();
+  try {
+    return JSON.parse(extractFirstJson(raw));
+  } catch (e) {
+    console.error('AI response parse error:', raw);
+    setStatus('ai returned unparseable response');
+    return null;
+  }
+}
+
+// ─── AI inject ────────────────────────────────────────────────────────────────
+let aiRunning = false;
+
+async function aiInject() {
+  if (aiRunning) return;
+  aiRunning = true;
+  const btn = document.getElementById('ai-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  setStatus('⬡ calling claude...');
+
+  const theme = document.getElementById('theme-input').value.trim() || null;
+  const result = await callClaude(theme);
+
+  btn.classList.remove('loading');
+  btn.disabled = false;
+  aiRunning = false;
+
+  if (!result) return;
+
+  // Register new custom words
+  if (result.new_words && typeof result.new_words === 'object') {
+    for (const [name, def] of Object.entries(result.new_words)) {
+      if (typeof def === 'string' && def.trim()) {
+        try { USER_WORDS[name] = tokenize(def); } catch (_) {}
+      }
+    }
+    updateWordsPanel();
+  }
+
+  // Place the new AI node to the right of the current graph
+  try {
+    const toks = tokenize(result.program || '');
+    if (!toks.length) { setStatus('ai returned empty program'); return; }
+    const all = Array.from(nodes.values());
+    const rightEdge = all.length ? Math.max(...all.map(n => n.x + NODE_W)) + 70 : 80;
+    const midY = all.length ? all.reduce((s, n) => s + n.y, 0) / all.length : 300;
+    const x = rightEdge;
+    const y = midY + (Math.random() - 0.5) * 120;
+    const label = result.label || 'ai';
+    const injected = addNode(toks, [], x, y, false, true, label);
+    injected.div.classList.add('fresh');
+    setTimeout(() => injected.div.classList.remove('fresh'), 7000);
+    setStatus(`✦ injected: ${label}`);
+  } catch (e) {
+    console.error('Forth parse error in AI program:', result.program, e);
+    setStatus('forth error in ai program — see console');
+  }
+}
+
+// ─── Custom words panel ───────────────────────────────────────────────────────
+function updateWordsPanel() {
+  const panel = document.getElementById('words-panel');
+  const list = document.getElementById('words-list');
+  const names = Object.keys(USER_WORDS);
+  if (!names.length) { panel.classList.remove('visible'); return; }
+  panel.classList.add('visible');
+  list.innerHTML = names.map(name => {
+    const def = toksToStr(USER_WORDS[name]);
+    const short = def.length > 40 ? def.slice(0, 38) + '…' : def;
+    return `<div class="word-entry"><span class="wname">${name}</span> <span class="wdef">— ${short}</span></div>`;
+  }).join('');
+}
+
+// ─── Auto-inject ──────────────────────────────────────────────────────────────
+// Cycles: OFF → 30s → 60s → 120s → OFF
+const AUTO_INTERVALS = [0, 30, 60, 120];
+let autoIdx = 0;
+let autoTimer = null;
+let countdownTimer = null;
+let autoCountdown = 0;
+
+function cycleAuto() {
+  clearInterval(autoTimer);
+  clearInterval(countdownTimer);
+  autoTimer = null; countdownTimer = null;
+  autoIdx = (autoIdx + 1) % AUTO_INTERVALS.length;
+  const secs = AUTO_INTERVALS[autoIdx];
+  const btn = document.getElementById('auto-btn');
+
+  if (secs === 0) {
+    btn.textContent = 'AUTO: OFF';
+    btn.classList.remove('active');
+    updateUI();
+  } else {
+    btn.textContent = `AUTO: ${secs}s`;
+    btn.classList.add('active');
+    autoCountdown = secs;
+    setStatus(`next inject in ${autoCountdown}s`);
+    countdownTimer = setInterval(() => {
+      autoCountdown--;
+      if (autoCountdown > 0) setStatus(`next inject in ${autoCountdown}s`);
+    }, 1000);
+    autoTimer = setInterval(() => {
+      autoCountdown = secs;
+      aiInject();
+    }, secs * 1000);
+  }
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+function exportNode(id) {
+  const node = nodes.get(id);
+  if (!node) return;
+
+  const btn = document.getElementById('export-btn');
+  const safeName = `forth-${id}-${(node.src || '').slice(0, 12).replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '') || 'node'}`;
+
+  if (node.isAnim) {
+    // Animated node → record 3 seconds of canvas as WebM
+    if (!node.canvas.captureStream) { showToast('browser does not support canvas recording'); return; }
+    const stream = node.canvas.captureStream(30);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9' : 'video/webm';
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      btn.classList.remove('recording');
+      btn.disabled = false;
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = safeName + '.webm'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setStatus(`saved ${safeName}.webm`);
+    };
+    btn.classList.add('recording');
+    btn.disabled = true;
+    setStatus('recording 3s…');
+    recorder.start();
+    setTimeout(() => recorder.stop(), 3000);
+  } else {
+    // Static node → export current canvas as PNG
+    const a = document.createElement('a');
+    a.href = node.canvas.toDataURL('image/png');
+    a.download = safeName + '.png';
+    a.click();
+    setStatus(`saved ${safeName}.png`);
+  }
+}
+
+// ─── Event wiring ─────────────────────────────────────────────────────────────
+document.getElementById('breed-btn').addEventListener('click', () => { breed(); updateUI(); });
+document.getElementById('anim-btn').addEventListener('click', () => {
+  if (lastSelected !== null && nodes.has(lastSelected)) createAnimNode(lastSelected);
+});
+document.getElementById('gen-btn').addEventListener('click', generate);
+document.getElementById('reset-btn').addEventListener('click', reset);
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (lastSelected !== null && nodes.has(lastSelected)) exportNode(lastSelected);
+});
+document.getElementById('ai-btn').addEventListener('click', aiInject);
+document.getElementById('auto-btn').addEventListener('click', cycleAuto);
+document.getElementById('key-btn').addEventListener('click', promptForKey);
+
+document.getElementById('theme-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); aiInject(); }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const toDelete = lastSelected !== null && nodes.has(lastSelected) ? lastSelected
+    : sel[0] !== null ? sel[0] : sel[1] !== null ? sel[1] : null;
+  if (toDelete !== null) { e.preventDefault(); deleteNode(toDelete); }
+});
+
+// Restore key indicator on load
+if (getApiKey()) document.getElementById('key-btn').classList.add('set');
+
+// ─── Help modal ───────────────────────────────────────────────────────────────
+function showHelp() {
+  const keyInput = document.getElementById('modal-key-input');
+  keyInput.value = getApiKey();
+  document.getElementById('help-overlay').classList.add('open');
+}
+function hideHelp() {
+  document.getElementById('help-overlay').classList.remove('open');
+}
+
+document.getElementById('help-btn').addEventListener('click', showHelp);
+document.getElementById('help-close').addEventListener('click', hideHelp);
+document.getElementById('help-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('help-overlay')) hideHelp();
+});
+document.getElementById('modal-key-save').addEventListener('click', () => {
+  const k = document.getElementById('modal-key-input').value.trim();
+  setApiKey(k);
+  const btn = document.getElementById('modal-key-save');
+  btn.textContent = 'SAVED'; setTimeout(() => { btn.textContent = 'SAVE KEY'; }, 1200);
+});
+
+// Show on first visit
+if (!localStorage.getItem('forth_seen_help')) {
+  localStorage.setItem('forth_seen_help', '1');
+  showHelp();
+}
+
+init();
+</script>
+</body>
+</html>
